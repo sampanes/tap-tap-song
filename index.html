@@ -9,16 +9,34 @@
   <body>
     <main class="app" aria-labelledby="song-title">
       <header class="topbar">
+        <div class="mode-tabs" role="tablist" aria-label="App mode">
+          <button id="player-mode-button" class="mode-tab active" type="button">Player</button>
+          <button id="cutter-mode-button" class="mode-tab" type="button">Cutter</button>
+        </div>
+
         <label class="song-picker" for="song-select">
           <span>Song</span>
           <select id="song-select" name="song"></select>
         </label>
       </header>
 
-      <section class="stage" aria-live="polite">
+      <section id="player-view" class="stage" aria-live="polite">
         <p class="eyebrow">Tap Tap Song</p>
         <h1 id="song-title">Loading song...</h1>
         <p id="phrase-progress" class="progress">Phrase 0 / 0</p>
+
+        <div class="playback-panel" aria-label="Playback settings">
+          <div class="playback-modes" role="group" aria-label="Playback mode">
+            <button class="playback-mode" type="button" data-playback-mode="safe">Safe</button>
+            <button class="playback-mode active" type="button" data-playback-mode="interrupt">Interrupt</button>
+            <button class="playback-mode" type="button" data-playback-mode="queue">Queue</button>
+          </div>
+          <div class="timing-readout" aria-label="Tap timing">
+            <span id="tap-interval">Last tap: -- ms</span>
+            <span id="tap-bpm">BPM: --</span>
+            <span id="playback-rate">Speed: 1.00x</span>
+          </div>
+        </div>
 
         <button id="tap-target" class="tap-target" type="button">
           <span class="wave" aria-hidden="true">~</span>
@@ -31,6 +49,73 @@
         </div>
 
         <p id="status-line" class="status" role="status">Ready</p>
+      </section>
+
+      <section id="cutter-view" class="cutter-view hidden" aria-labelledby="cutter-title">
+        <div class="cutter-main">
+          <div class="cutter-header">
+            <div>
+              <p class="eyebrow">phrase cutter</p>
+              <h1 id="cutter-title">Make Clips</h1>
+            </div>
+            <label class="file-loader" for="song-file">
+              <span>Full song MP3</span>
+              <input id="song-file" type="file" accept="audio/*">
+            </label>
+          </div>
+
+          <div class="transport">
+            <button id="cutter-play" class="secondary-button" type="button">Play</button>
+            <span id="cutter-clock" class="clock">0:00.000</span>
+            <audio id="cutter-audio" preload="auto"></audio>
+          </div>
+
+          <canvas id="waveform" class="waveform" width="1200" height="220" aria-label="Song waveform"></canvas>
+
+          <div class="zoom-tools">
+            <label for="zoom-range">
+              <span>Zoom</span>
+              <input id="zoom-range" type="range" min="4" max="60" step="1" value="12">
+            </label>
+            <button id="zoom-playhead" class="secondary-button" type="button">Center Playhead</button>
+          </div>
+
+          <canvas id="zoom-waveform" class="waveform zoom" width="1200" height="150" aria-label="Zoomed waveform"></canvas>
+
+          <div class="keyframe-tools">
+            <button id="add-keyframe" class="secondary-button" type="button">Add Keyframe</button>
+            <label for="gap-seconds">
+              <span>Gap seconds</span>
+              <input id="gap-seconds" type="number" min="0.05" step="0.05" value="0.6">
+            </label>
+            <button id="fill-keyframes" class="secondary-button" type="button">Fill All Anchors</button>
+            <button id="clear-last-keyframe" class="secondary-button" type="button">Clear Last</button>
+            <button id="clear-generated-keyframes" class="secondary-button" type="button">Clear Generated</button>
+            <button id="clear-keyframes" class="secondary-button danger" type="button">Clear All</button>
+          </div>
+
+          <p id="cutter-status" class="status" role="status">Load an MP3 to begin.</p>
+          <div class="legend" aria-label="Waveform marker legend">
+            <span class="anchor">Manual anchor</span>
+            <span class="generated">Generated point</span>
+          </div>
+        </div>
+
+        <aside class="snippet-panel" aria-label="Snippets">
+          <div class="panel-heading">
+            <h2>Snippets</h2>
+            <p id="snippet-summary">0 clips</p>
+          </div>
+          <div id="snippet-list" class="snippet-list"></div>
+          <div class="export-actions">
+            <button id="copy-export" class="secondary-button" type="button">Copy Export</button>
+            <button id="download-csv" class="secondary-button" type="button">Download CSV</button>
+          </div>
+          <label class="export-box" for="export-output">
+            <span>CSV and FFmpeg commands</span>
+            <textarea id="export-output" readonly spellcheck="false"></textarea>
+          </label>
+        </aside>
       </section>
     </main>
 
