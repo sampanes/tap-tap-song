@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tap Tap Song</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app" aria-labelledby="song-title">
+      <header class="topbar">
+        <label class="song-picker" for="song-select">
+          <span>Song</span>
+          <select id="song-select" name="song"></select>
+        </label>
+      </header>
+
+      <section class="stage" aria-live="polite">
+        <p class="eyebrow">Tap Tap Song</p>
+        <h1 id="song-title">Loading song...</h1>
+        <p id="phrase-progress" class="progress">Phrase 0 / 0</p>
+
+        <button id="tap-target" class="tap-target" type="button">
+          <span class="wave" aria-hidden="true">~</span>
+          <span class="tap-label">Tap</span>
+          <span class="tap-hint">next phrase</span>
+        </button>
+
+        <div class="controls">
+          <button id="reset-button" class="secondary-button" type="button">Reset</button>
+        </div>
+
+        <p id="status-line" class="status" role="status">Ready</p>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
