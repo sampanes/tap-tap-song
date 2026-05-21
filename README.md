@@ -4,7 +4,9 @@ A small static web app for tapping through songs one phrase at a time. It uses p
 
 ## Run It
 
-Open `index.html` in a browser, or publish the repository with GitHub Pages.
+Live page: https://sampanes.github.io/tap-tap-song/
+
+You can also open `index.html` in a browser locally.
 
 ## Player Modes
 
