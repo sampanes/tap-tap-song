@@ -48,6 +48,12 @@ let playbackToken = 0;
 let lastTapTime = 0;
 let tapIntervals = [];
 
+const playerEngine = {
+  audioContext: null,
+  bufferCache: new Map(),
+  activeSource: null
+};
+
 function initialize() {
   Object.entries(SONGS).forEach(([key, song]) => {
     const option = document.createElement("option");
@@ -86,6 +92,9 @@ function setMode(mode) {
 
   if (isCutter) {
     stopActiveAudio();
+    if (playerEngine.audioContext && playerEngine.audioContext.state === "running") {
+      playerEngine.audioContext.suspend();
+    }
     drawCutterWaveforms();
   } else {
     pauseCutterAudio();
@@ -157,7 +166,7 @@ function playNextPhrase() {
   startNextPhrase();
 }
 
-function startNextPhrase() {
+async function startNextPhrase() {
   const song = getCurrentSong();
 
   if (isPlaying) {
@@ -175,49 +184,64 @@ function startNextPhrase() {
   }
 
   const clipIndex = phraseIndex;
-  if (clipIndex >= song.clips.length) {
+  const clipPath = song.clips[clipIndex];
+
+  if (!clipPath) {
     setStatus("Song complete. Press Reset to start again.");
     return;
   }
 
-  const audio = nextAudio && nextAudio.src.endsWith(song.clips[clipIndex])
-    ? nextAudio
-    : new Audio(song.clips[clipIndex]);
   const token = playbackToken + 1;
 
   playbackToken = token;
-  activeAudio = audio;
   activeClipIndex = clipIndex;
-  nextAudio = null;
   isPlaying = true;
   hasQueuedTap = false;
   advancePhraseIndex(song, clipIndex);
   preloadNextClip();
   render();
   setStatus("Loading...");
-  configureClipTiming(audio, token);
 
-  audio.addEventListener("canplaythrough", () => {
-    if (token === playbackToken) {
-      setStatus("Playing...");
+  try {
+    const context = await getPlayerAudioContext();
+
+    if (token !== playbackToken) {
+      return;
     }
-  }, { once: true });
-  audio.addEventListener("ended", () => onPhraseEnded(token), { once: true });
-  audio.addEventListener("error", () => onAudioError(token), { once: true });
 
-  const playPromise = audio.play();
+    const buffer = await loadClipBuffer(clipPath);
 
-  if (playPromise) {
-    playPromise.catch(() => {
-      if (token !== playbackToken) {
-        return;
-      }
+    if (token !== playbackToken) {
+      return;
+    }
 
-      isPlaying = false;
-      activeClipIndex = null;
-      setStatus("Could not play this clip. Check the audio file path.", true);
-      render();
-    });
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = playbackRateForPreviousTap(buffer.duration);
+    source.connect(context.destination);
+    source.onended = () => onPhraseEnded(token);
+
+    stopActiveSource();
+    playerEngine.activeSource = source;
+    source.start(0);
+
+    activeAudio = {
+      duration: buffer.duration,
+      playbackRate: source.playbackRate.value,
+      stop: () => source.stop(0)
+    };
+
+    playbackRateReadout.textContent = `Speed: ${source.playbackRate.value.toFixed(2)}x`;
+    setStatus("Playing...");
+  } catch (error) {
+    if (token !== playbackToken) {
+      return;
+    }
+
+    isPlaying = false;
+    activeClipIndex = null;
+    setStatus("Could not play this clip. Check the audio file path.", true);
+    render();
   }
 }
 
@@ -260,16 +284,69 @@ function onAudioError(token) {
   render();
 }
 
+
+async function getPlayerAudioContext() {
+  if (!playerEngine.audioContext) {
+    playerEngine.audioContext = new AudioContext({ latencyHint: "interactive" });
+  }
+
+  if (playerEngine.audioContext.state === "suspended") {
+    await playerEngine.audioContext.resume();
+  }
+
+  return playerEngine.audioContext;
+}
+
+async function loadClipBuffer(clipPath) {
+  if (!clipPath) {
+    return null;
+  }
+
+  if (playerEngine.bufferCache.has(clipPath)) {
+    return playerEngine.bufferCache.get(clipPath);
+  }
+
+  const context = await getPlayerAudioContext();
+  const response = await fetch(clipPath);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch clip: ${clipPath}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const decoded = await context.decodeAudioData(arrayBuffer);
+  playerEngine.bufferCache.set(clipPath, decoded);
+  return decoded;
+}
+
+function warmClipBuffer(clipPath) {
+  loadClipBuffer(clipPath).catch(() => {
+    // Ignore warmup failures; the tap-time load will show the real error state.
+  });
+}
+
+function stopActiveSource() {
+  if (!playerEngine.activeSource) {
+    return;
+  }
+
+  try {
+    playerEngine.activeSource.stop(0);
+  } catch (error) {
+    // Source might already be stopped.
+  }
+
+  playerEngine.activeSource.disconnect();
+  playerEngine.activeSource = null;
+}
+
 function preloadNextClip() {
   const song = getCurrentSong();
   const clip = song.clips[phraseIndex];
+  const afterClip = song.clips[phraseIndex + 1];
 
-  nextAudio = clip ? new Audio(clip) : null;
-
-  if (nextAudio) {
-    nextAudio.preload = "auto";
-    nextAudio.load();
-  }
+  warmClipBuffer(clip);
+  warmClipBuffer(afterClip);
 }
 
 function stopActiveAudio(shouldResetTime = true) {
@@ -280,10 +357,7 @@ function stopActiveAudio(shouldResetTime = true) {
   }
 
   playbackToken += 1;
-  activeAudio.pause();
-  if (shouldResetTime) {
-    activeAudio.currentTime = 0;
-  }
+  stopActiveSource();
   activeAudio = null;
   isPlaying = false;
   activeClipIndex = null;
@@ -391,38 +465,14 @@ function renderTapTiming() {
   tapBpmReadout.textContent = `BPM: ${bpm}`;
 }
 
-function configureClipTiming(audio, token) {
-  const applyRate = () => {
-    if (token !== playbackToken) {
-      return;
-    }
-
-    const rate = playbackRateForPreviousTap(audio);
-    audio.playbackRate = rate;
-
-    if ("preservesPitch" in audio) {
-      audio.preservesPitch = false;
-    }
-
-    playbackRateReadout.textContent = `Speed: ${rate.toFixed(2)}x`;
-  };
-
-  applyRate();
-
-  if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
-    audio.addEventListener("loadedmetadata", applyRate, { once: true });
-  }
-}
-
-function playbackRateForPreviousTap(audio) {
+function playbackRateForPreviousTap(naturalSeconds) {
   const latestInterval = tapIntervals[tapIntervals.length - 1];
 
-  if (!latestInterval || !Number.isFinite(audio.duration) || audio.duration <= 0) {
+  if (!latestInterval || !Number.isFinite(naturalSeconds) || naturalSeconds <= 0) {
     return 1;
   }
 
   const targetSeconds = Math.max(0.08, latestInterval / 1000);
-  const naturalSeconds = audio.duration;
   return clamp(naturalSeconds / targetSeconds, MIN_PLAYBACK_RATE, MAX_PLAYBACK_RATE);
 }
 
